@@ -81,10 +81,10 @@ kaggle_data['similarity'] = similarities
 kaggle_data_with_names = pd.read_csv(kaggle_data_path)
 kaggle_data['name'] = kaggle_data_with_names['name']
 kaggle_data['artists'] = kaggle_data_with_names['artists']
-recommendations = kaggle_data.sort_values(by='similarity').drop_duplicates(subset='name', keep='first').head(25)
+recommendations = kaggle_data.sort_values(by='similarity').drop_duplicates(subset='name', keep='first')
 
 # Create a DataFrame for the recommended songs
-recommended_songs_df = recommendations[['name', 'artists'] + minmax_columns]
+recommended_songs_df = recommendations[['name', 'artists'] + minmax_columns].drop_duplicates(subset='name', keep='first').head(25)
 
 # Display the recommended songs DataFrame
 print("Top 10 recommended songs based on user's listening habits:")
