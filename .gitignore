@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# data
+data/kaggle_dataset_filtered_new.csv
+
+
 # Distribution / packaging
 .Python
 build/
