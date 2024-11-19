@@ -3,9 +3,16 @@ from torch.utils.data import Dataset, DataLoader
 from transformers import AutoModel, AutoTokenizer
 import torch.nn as nn
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+# Pandas display settings
+pd.set_option('display.width', 400)
+pd.set_option('display.max_columns', 10)
 
 # Load dataset
-user_data_path = 'data/Karthik-Filtered.csv'
+user_data_path = 'data/Harshil-Filtered.csv'
 user_data = pd.read_csv(user_data_path)
 
 # Generate synthetic training data
@@ -70,24 +77,42 @@ class BERTForFeaturePrediction(nn.Module):
 
 model = BERTForFeaturePrediction("distilbert-base-uncased", output_dim=4)
 
-# Training
+# Training with better logging
 optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5)
 loss_fn = nn.MSELoss()
 
-for epoch in range(3):
-    for batch in dataloader:
+from tqdm import tqdm
+
+# Determine number of epochs for 100 total runs
+batches_per_epoch = len(dataloader)  # Number of batches in the dataloader
+num_epochs = 100 // batches_per_epoch  # Total runs / batches per epoch
+
+print(f"Total Epochs: {num_epochs}, Batches per Epoch: {batches_per_epoch}, Total Runs: {num_epochs * batches_per_epoch}")
+
+# Training with progress bar
+for epoch in range(num_epochs):
+    total_loss = 0
+    # Add progress bar for batches
+    for batch in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
         input_ids = batch["input_ids"]
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
 
+        # Forward pass
         predictions = model(input_ids, attention_mask)
         loss = loss_fn(predictions, labels)
 
+        # Backward pass and optimization
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        print(f"Epoch {epoch}, Loss: {loss.item()}")
+        total_loss += loss.item()
+
+    # Log average loss for the epoch
+    avg_loss = total_loss / len(dataloader)
+    print(f"Epoch {epoch + 1} completed. Average Loss: {avg_loss:.4f}\n")
+
 
 # Predict Features from Prompt
 def predict_features(prompt, model, tokenizer):
@@ -121,35 +146,60 @@ def filter_songs(user_data, predicted_features):
         filtered = user_data[conditions]
     return filtered
 
-# Generate Playlist Function
+# Visualization Function
+def visualize_results(prompt, predicted_features, recommended_songs):
+    avg_features = recommended_songs[["energy", "danceability", "valence", "instrumentalness"]].mean()
+
+    # Bar Chart
+    plt.figure(figsize=(10, 6))
+    x = ["Energy", "Danceability", "Valence", "Instrumentalness"]
+    bar_width = 0.35
+    index = np.arange(len(x))
+
+    plt.bar(index, predicted_features, bar_width, label="Predicted Features", alpha=0.7)
+    plt.bar(index + bar_width, avg_features, bar_width, label="Average Song Features", alpha=0.7)
+
+    plt.xlabel("Features", fontsize=12)
+    plt.ylabel("Values", fontsize=12)
+    plt.title(f"Feature Comparison for Prompt: '{prompt}'", fontsize=14)
+    plt.xticks(index + bar_width / 2, x)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    # Feature Distributions
+    plt.figure(figsize=(12, 8))
+    for i, feature in enumerate(["energy", "danceability", "valence", "instrumentalness"]):
+        plt.subplot(2, 2, i + 1)
+        sns.histplot(recommended_songs[feature], kde=True, bins=10, color="skyblue", edgecolor="black")
+        plt.title(f"Distribution of {feature.capitalize()}", fontsize=12)
+        plt.xlabel(feature.capitalize(), fontsize=10)
+        plt.ylabel("Frequency", fontsize=10)
+    plt.tight_layout()
+    plt.show()
+
+# Generate Playlist Function with Visualization
 def generate_playlist(prompt, model, user_data, tokenizer):
-    """
-    Generate a playlist based on the input prompt.
-    """
-    # Predict features based on the prompt
     predicted_features = predict_features(prompt, model, tokenizer)
     print(f"Predicted Features: {predicted_features}")
 
-    # Filter the songs based on predicted features
     filtered_songs = filter_songs(user_data, predicted_features)
-
-    # Check if songs were found
     if filtered_songs.empty:
         print("No songs match the predicted features.")
         return None
 
-    # Add song features to the output
-    print("\nRecommended Songs with Features:")
-    print(filtered_songs[["name", "artists", "energy", "danceability", "valence", "instrumentalness"]])
+    filtered_songs = filtered_songs.head(20)
+    display_columns = ["name", "artists", "energy", "danceability", "valence", "instrumentalness"]
+    filtered_songs = filtered_songs[display_columns]
 
-    return filtered_songs[["name", "artists", "energy", "danceability", "valence", "instrumentalness"]]
+    visualize_results(prompt, predicted_features, filtered_songs)
+
+    return filtered_songs
 
 # Prompt Input and Playlist Generation
 user_prompt = input("Enter your music prompt: ")
 playlist = generate_playlist(user_prompt, model, user_data, tokenizer)
 
-# Display the Playlist
 if playlist is not None:
-    print("\nGenerated Playlist:")
+    print("\nFinal Playlist:")
     print(playlist)
-
